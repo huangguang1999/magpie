@@ -449,9 +449,10 @@ each place is drawn again once it is in. All three come from
   stay, so `familyWindows` folds the result as an account's.
 
 No account is named in it, and each account stays below it as it was.
-There is no switch: it is additive, and the figure follows used or left
-with the rest. See `usage-merge.test.cjs` (the merge) and
-`usage-all-accounts.test.cjs` (the three places).
+There is no switch of its own: it is additive, and the figure follows Used
+or Left, and the whole allowance or Up to the cap, with the rest. See
+`usage-merge.test.cjs` (the merge) and `usage-all-accounts.test.cjs` (the
+three places).
 
 Below the strip each account of a card with several is a card of its own
 inside the provider's (`.subscription-acct`, a box on `--card-2` with a
@@ -512,6 +513,51 @@ columns and Other only exist when some row has one). It
 scrolls in its own box at a narrow width, the subscription held at the left.
 See `usage-quota-table.test.cjs`, `usage-table-groups.test.cjs`,
 `usage-table-lengths.test.cjs` and `TestWithWindowPeriods`.
+
+The Allowances head (`#quotaMode`, drawn by `renderQuotaMode` in the Usage
+page's plugin, `plugins/usage/page.js`, like the trend pick beside it, so
+the core script stays within its budget) keeps Used and Left as its two
+choices; the picked one also says what its share is counted against, and
+a click on it again opens a menu (`openProtoMenu`) of **Whole allowance**
+(the vendor's own percentage, as before) and **Up to the cap**. The choice
+goes with either Used or Left, and a click on the other one keeps it.
+While the menu is open the pick is not drawn again: the Usage page's
+refresh draws the allowances every few seconds, and a redrawn pick would
+leave the menu on a button no longer in the page. The choice is kept in
+`magpie.quotaUnderCap` on this computer; Used or Left stays the shared
+`quotaLeft` setting.
+
+Up to the cap answers what an account can still use under its own usage
+cap (a user with every account capped at 95% read 16% of five hours used
+across them while none could be used). `capShares` in the usage plugin
+takes the Overview's cards (`overviewCards`), before a card's hidden rows
+are left out so that a week hidden at its cap still holds the five hours
+shown, and counts each window's share up to
+the account's or the window's own cap C (`windowCapOf`, the window known by
+its name as `WindowCapID` makes it, a pool's after its pool's):
+`min(100, U × 100 / C)`, so 95% of a 95% cap is all of it. A window that
+another one at its cap stops the account past is all used and held by it
+(`heldBy`), the gateway's own rule (`window_held.go`) at the cap rather
+than at 100%: the stopping window hasn't started again since it was read,
+and starts again after this one (by their resets, else by how long each
+runs). A week with room left behind five hours at their cap isn't held.
+`/api/usage/quotas` isn't sent through `WithCapped` as the account rows'
+reading is, and a window's `Model` and `Aside` never reach the GUI, so
+what a cap counts is told from what the cards say: a window of money
+(`extra`, a balance), an amount or a text isn't counted, and only a window
+named as a run of time alone ("5 hours", "Weekly", `capSpan`) stops the
+whole account. A pool's own window (a `pool` and no `family`) at its cap
+holds its own pool's windows and no other, as the gateway's rule does for
+one used up. One of some models ("7 days Opus") or a family's is counted
+up to its cap but holds no other window. Everything after it is the percentage view as it was: the
+cards, the table and its sort, the all-accounts strip and its held count
+all read the copy. The cards in `quotas`, the panel, the menu bar and
+routing are left as they were. A card with no cap read yet, another
+magpie's (its caps are its own) and a window with no cap are as the vendor
+says; the providers' list is read again when Up to the cap is picked if
+its first read failed. See `usage-quota-cap.test.cjs` for the rules and
+`usage-quota-table.test.cjs` for the menu, both layouts, Used and Left
+each way, and the switch back to the whole allowance.
 
 ### The Sessions page's folders
 

@@ -1260,6 +1260,9 @@ body.panel .row.pref.flash { border-radius: 10px; }
 /* what was left over time (#651): a line a window, an even burn dashed, now
    upright; the range (or Off) is picked once, in the allowances' head */
 #view-usage .row-head.quota-head { gap: 8px; }
+/* Used or Left, the picked one with what it counts against and the menu's chevron */
+#quotaMode .opt { display: inline-flex; align-items: center; gap: 3px; }
+#quotaMode .opt svg { flex: none; }
 .quota-curve { margin-top: 10px; }
 .quota-curve .qc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 10.5px; color: var(--muted); }
 .quota-curve .qc-range { font-size: 10px; color: var(--muted); }

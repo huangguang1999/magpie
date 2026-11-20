@@ -1520,12 +1520,14 @@ const cardHideKeys = (q) => [cardHideKey(q), ...(q.balanceCard ? [q.balanceCard 
 const hiddenCards = () => new Set(state.settings?.usageCardsHidden || []);
 const cardPeeked = (q) => !!usagePeek && (trayCardID(q) === usagePeek || q.provider === usagePeek);
 // overviewCards: the cards the Overview draws, a provider's keys sharing
-// one balance already one card (sharedBalances), the hidden left out
+// one balance already one card (sharedBalances), the hidden left out. Their
+// shares are counted up to the cap (capShares) before a card's hidden rows
+// go, so a week hidden at its cap still holds the five hours shown.
 function overviewCards(list) {
   const hid = hiddenCards();
   list = sharedBalances(list);
   list = hid.size ? list.filter((q) => !hid.has(cardHideKey(q)) || cardPeeked(q)) : list;
-  return list.map(withoutHiddenRows);
+  return capShares(list).map(withoutHiddenRows);
 }
 // A card's quota rows can be hidden one by one (wangshaowei39 on X:
 // Antigravity's Claude & GPT rows unwanted), by provider and row group, a
@@ -5910,6 +5912,102 @@ function packUsageNow(list) {
     usagePack.observe(card);
     for (const part of card.children) usagePack.observe(part);
   }
+}
+
+// renderQuotaMode: the allowances' head's Used or Left. The picked one also
+// says what its share is counted against, the whole allowance or each
+// account's usage cap (capShares), and a click on it again picks that in a
+// menu; the choice goes with either.
+const QUOTA_BASES = [
+  [false, "Whole allowance", "As the vendor reports it"],
+  [true, "Up to the cap", "Each account's usage cap counts as 100%"],
+];
+function renderQuotaMode() {
+  const pick = $("#quotaMode");
+  if (!pick) return;
+  pick.hidden = !quotas?.some((q) => !q.error && q.windows?.length);
+  // with its menu open the pick is left as drawn: the page's refresh draws
+  // the allowances every few seconds, and a pick drawn again would leave the
+  // menu on a button no longer there. A choice closes the menu before it is
+  // made, so nothing shown here is stale.
+  if (pick.hidden || protoMenu && pick.contains(protoMenu.anchor)) return;
+  pick.replaceChildren();
+  for (const [left, name] of [[false, "Used"], [true, "Left"]]) {
+    const on = left === quotaLeft;
+    const b = el("button", "opt" + (on ? " on" : ""));
+    b.type = "button";
+    b.append(el("span", "", t(name) + (on && quotaUnderCap ? " · " + t("Up to the cap") : "")));
+    const what = t(left ? "Show how much of each window is left" : "Show how much of each window is used");
+    b.title = on ? what + "\n" + t("Choose to count against the whole allowance or each account's usage cap") : what;
+    if (on) {
+      b.append(svg(CHEV, 10, 1.6));
+      menuOf(b);
+    }
+    b.onclick = (e) => {
+      if (!on) return setQuotaLeft(left);
+      e.stopPropagation();
+      if (b.classList.contains("open")) return closeProtoMenu();
+      openProtoMenu(b, QUOTA_BASES.map(([v, name, note]) => ({ v, name, note })), quotaUnderCap, setQuotaUnderCap, "Counted against", "sess-menu", "right");
+    };
+    pick.append(b);
+  }
+  slide(pick, "quotaMode");
+}
+// setQuotaUnderCap: whether the shares are counted up to each account's
+// cap, kept on this computer; only this page picks it, so it lives here and
+// not in app.js. The caps are in the providers' list, read again if its
+// first read failed.
+function setQuotaUnderCap(v) {
+  if (v === quotaUnderCap) return;
+  quotaUnderCap = v;
+  keep("quotaUnderCap", v);
+  if (v) prefetchProviders();
+  renderQuotas();
+}
+
+// capShares: the cards with each share taken up to its account's usage
+// cap, the cap as 100%, once Up to the cap is picked: 95% used of a 95% cap
+// is all of it. A window that another one at its cap stops the account past
+// (window_held.go's rule, at the cap rather than at 100%) is all used too,
+// held by it as the gateway's own holds are, so the all-accounts strip
+// counts it the same way. The Usage page's cards aren't marked as an
+// account's are (WithCapped): what a cap counts is told here from what they
+// say, and only a window named as a run of time alone ("5 hours", "Weekly")
+// stops the whole account, never one of some models ("7 days Opus") or a
+// family's. A pool's own window (Antigravity's "Claude & GPT" week) stops
+// its own pool's windows and no other. Cards whose caps aren't read yet,
+// another magpie's, and windows of money, amounts or text stay as they
+// were; the cards themselves (quotas) are left as they are.
+function capShares(list) {
+  const all = quotaUnderCap && (providers || providersEarly?.got)?.providers;
+  if (!all) return list;
+  const now = Date.now();
+  const at = (w) => w.resetsAt ? Date.parse(w.resetsAt) : w.resetSecs > 0 ? now + w.resetSecs * 1e3 : 0;
+  const outlasts = (h, w) => at(h) && at(w) ? at(h) > at(w) : capSpan(h) > capSpan(w);
+  return list.map((q) => {
+    const p = !q.from && !q.error && all.find((x) => x.id === q.provider);
+    if (!p || !q.windows?.length) return q;
+    // its cap by WindowCapID: the name, a pool's after the pool's
+    const cap = (w) => w.used != null && !w.text && !w.unlimited && !w.extra && w.balance == null && !(w.limit > 0)
+      ? windowCapOf(p, q.user || "", { ...w, capId: w.capId || (w.pool && !w.family ? w.pool + " · " + w.name : w.name).trim().toLowerCase() }) : 0;
+    // what stops at its cap: a window named as a run of time alone stops the
+    // account (stopsAll), a pool's own window its own pool (stopsPool)
+    const stops = q.windows.filter((h) => !h.family && (h.pool || capSpan(h, true)) && cap(h) && h.used >= cap(h) && !(at(h) && at(h) <= now));
+    return { ...q, windows: q.windows.map((w) => {
+      const by = w.used != null && !w.text && !w.unlimited && w.balance == null && stops.find((h) => h !== w && (!h.pool || h.pool === w.pool) && outlasts(h, w));
+      if (by) return { ...w, used: 100, heldBy: w.heldBy || by.name };
+      const c = cap(w);
+      return c > 0 && c < 100 ? { ...w, used: Math.min(100, w.used * 100 / c) } : w;
+    }) };
+  });
+}
+// capSpan: a window's hours by its name ("5 hours", "7 days", "Weekly"),
+// for window_held.go's outlasts when a reset isn't known; whole, only when
+// its name says nothing more (not "7 days Opus"), else 0
+function capSpan(w, whole) {
+  const m = /^(?:(\d+)\s*(hours?|h|days?|d|weeks?|w)|(daily|day)|(weekly|week)|(monthly|month))(.*)$/.exec(String(w.name || "").trim().toLowerCase());
+  if (!m || whole && m[6].trim()) return 0;
+  return m[1] ? m[1] * { h: 1, d: 24, w: 168 }[m[2][0]] : m[3] ? 24 : m[4] ? 168 : 720;
 }
 
 // The allowances' trend pick in the page's head, and what a curve under a

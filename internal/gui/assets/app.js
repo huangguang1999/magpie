@@ -6061,6 +6061,7 @@ function prefetchProviders() {
   e.read.then((s) => {
     e.got = s;
     markNewPartners();
+    if (quotaUnderCap && view === "usage") renderQuotas();
     if (state?.agents?.some((a) => !a.wired && (a.id === "claude" || a.id === "codex"))) renderAgents();
   }, () => { if (providersEarly === e) providersEarly = null; });
 }
@@ -15052,6 +15053,10 @@ const quotaAllOf = (...a) => window.quotaAll ? quotaAll(...a) : void quotaAllJS(
 // table is the reader's own pick on this computer, cards until then.
 let quotaView = kept("quotaView", "cards");
 const quotaTableJS = () => (quotaTableJS.p ||= import("./quotatable.js").then(() => renderQuotas(), () => {}));
+// The Usage page's shares counted up to each account's cap, its cap as 100%,
+// with Used or Left, on this computer; the Usage page's plugin picks and
+// counts them (capShares)
+let quotaUnderCap = kept("quotaUnderCap", false);
 // tiersText: a family's windows, one a line, for its tooltip.
 function tiersText(w) {
   return (w.tiers || []).map((x) => t(x.name) + " " + quotaText(x)
@@ -16465,19 +16470,9 @@ function renderQuotas(lazy) {
   const was = [...subscriptions.children];
   subscriptions.replaceChildren();
   // the allowances' heading: used or left, shown with a card that has one
+  // (the Usage page's plugin draws that pick)
   $("#quotaHead").hidden = !!quotas && !quotas.length;
-  const pick = $("#quotaMode");
-  pick.hidden = !quotas?.some((q) => !q.error && q.windows?.length);
-  if (!pick.hidden) {
-    pick.replaceChildren();
-    for (const [left, name] of [[false, "Used"], [true, "Left"]]) {
-      const b = el("button", "opt" + (left === quotaLeft ? " on" : ""), t(name));
-      b.title = t(left ? "Show how much of each window is left" : "Show how much of each window is used");
-      b.onclick = () => { if (left !== quotaLeft) setQuotaLeft(left); };
-      pick.append(b);
-    }
-    slide(pick, "quotaMode");
-  }
+  renderQuotaMode();
   const views = $("#quotaView");
   views.hidden = !quotas?.length;
   if (!views.hidden) {
