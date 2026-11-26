@@ -230,6 +230,32 @@ func learnedJump(t *testing.T, srv *Server) {
 	t.Fatalf("what a turn spends: %+v; want the jump learned as one turn's, %v", srv.turnSpend.m, maxTurnSpend)
 }
 
+// readSince has acct-1's usage read again once both of its turns came
+// back, as magpie reads it every minute it is asked, and waits for the
+// reading to say want.
+func readSince(t *testing.T, srv *Server, want float64) {
+	t.Helper()
+	waitFor(t, "both turns back", func() bool {
+		srv.lanes.mu.Lock()
+		defer srv.lanes.mu.Unlock()
+		for _, n := range srv.lanes.turns {
+			if n >= 2 {
+				return true
+			}
+		}
+		return false
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if !provider.ReadUsageNow(ctx, "codex", "me@example.com") {
+		t.Fatal("never read")
+	}
+	waitFor(t, fmt.Sprintf("read at %v%%", want), func() bool {
+		n, _ := provider.Allowances("codex")["me@example.com"].For("gpt-5.5", time.Now())
+		return n == want
+	})
+}
+
 // #7877: an account at 35% of a 95% cap, signed in on another computer
 // too. What that one spent was learned as one turn's, at maxTurnSpend,
 // and each turn after it that left the reading at 35% was counted ahead
@@ -274,6 +300,20 @@ func TestNearCapSilentRepliesStayAhead(t *testing.T) {
 	}
 	if codes[200] == 0 {
 		t.Fatalf("codes %v; want turns let in before it was held", codes)
+	}
+	learnedJump(t, srv)
+}
+
+// #7877: a reading begun after the last turn came back, as magpie reads
+// one every minute it is asked, has that turn in it. Told nothing of it,
+// the turn stayed ahead of the reading at maxTurnSpend, and the account
+// at 81% of a 95% cap, a turn there taken to spend 5 points, was held
+// (81 + 5 + 10 > 95) till its window renewed.
+func TestNearCapReadingSinceTheLastTurnHasIt(t *testing.T) {
+	srv, _ := jumpedAccount(t, 95, 70, 11)
+	readSince(t, srv, 81)
+	if code, body := sendCodexTurn(srv); code != 200 {
+		t.Fatalf("at 81%% of a 95%% cap: %d %s", code, body)
 	}
 	learnedJump(t, srv)
 }

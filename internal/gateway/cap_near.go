@@ -297,8 +297,12 @@ func userCapped(c candidate) bool {
 // used as it begins, without its own turn, and what that turn spent is in
 // no reading yet; and when this turn waited for the one before it and
 // nothing has told the account's usage since (the reply before it said
-// nothing of it). It says whether it read it: the reading then has every
-// turn come back before it.
+// nothing of it). It says whether the reading known then has every turn
+// come back before it: read again here, or read since the last came
+// back, as magpie reads one every minute it is asked. Told nothing of
+// the second, the turns such a reading had stayed ahead of it, and an
+// account held by them stayed held till its window renewed, each reading
+// after it read since the last turn too (#7877).
 func nearCapAgain(ctx context.Context, c candidate, used, ahead float64, waited bool, ended time.Time) bool {
 	now, ok := nearCapOf(c, time.Now(), nearCapPoints+ahead)
 	if !ok {
@@ -308,7 +312,7 @@ func nearCapAgain(ctx context.Context, c candidate, used, ahead float64, waited 
 	at, _, read := usageRead(a.UsageAgent(), a.User)
 	spent := !ended.IsZero() && (!read || ended.After(at))
 	if !spent && !(waited && now == used) {
-		return false
+		return read // read since every turn came back
 	}
 	ctx, cancel := context.WithTimeout(ctx, carefulWait)
 	defer cancel()
