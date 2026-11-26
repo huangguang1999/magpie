@@ -133,7 +133,7 @@ func TestCapHoldsUnderParallelSessions(t *testing.T) {
 func TestTurnSpendsAhead(t *testing.T) {
 	var ts turnSpends
 	// nothing learned yet, and no turn read since: a few points a turn
-	if got := ts.ahead("a", 60, 0, 0, 3); got != 3*nearCapPoints {
+	if got := ts.ahead("a", 60, 0, 0, 0, 3); got != 3*nearCapPoints {
 		t.Fatalf("nothing learned yet: ahead %v; want %v", got, 3*nearCapPoints)
 	}
 	if got := ts.own("a"); got != 0 {
@@ -141,83 +141,84 @@ func TestTurnSpendsAhead(t *testing.T) {
 	}
 	// two turns came back, the reading not moved: under a point between
 	// them, still nothing learned
-	if got := ts.ahead("a", 60, 2, 2, 3); got != 2.5 {
+	if got := ts.ahead("a", 60, 2, 2, 0, 3); got != 2.5 {
 		t.Fatalf("ahead %v; want 5 turns at half a point", got)
 	}
 	// it moved 3 points over those two: 1.5 a turn, none since
-	if got := ts.ahead("a", 63, 2, 2, 4); got != 6 {
+	if got := ts.ahead("a", 63, 2, 2, 0, 4); got != 6 {
 		t.Fatalf("ahead %v; want 4 turns out at 1.5", got)
 	}
 	// one more came back unread, three out
-	if got := ts.ahead("a", 63, 3, 2, 3); got != 6 {
+	if got := ts.ahead("a", 63, 3, 2, 0, 3); got != 6 {
 		t.Fatalf("ahead %v; want 4 turns at 1.5", got)
 	}
 	if got := ts.own("a"); got != 1.5 {
 		t.Fatalf("own %v; want 1.5", got)
 	}
 	// renewed: what a turn spends stands, counted from here
-	if got := ts.ahead("a", 2, 3, 3, 1); got != 1.5 {
+	if got := ts.ahead("a", 2, 3, 3, 0, 1); got != 1.5 {
 		t.Fatalf("ahead %v; want one turn at 1.5", got)
 	}
 	// a jump the vendor's own app made too is not taken as one turn's,
 	// and holds a turn short of the cap by nearCapPoints at most
-	if got := ts.ahead("a", 40, 4, 4, 1); got != maxTurnSpend {
+	if got := ts.ahead("a", 40, 4, 4, 0, 1); got != maxTurnSpend {
 		t.Fatalf("ahead %v; want %v", got, maxTurnSpend)
 	}
 	if got := ts.own("a"); got != nearCapPoints {
 		t.Fatalf("own %v; want %v", got, nearCapPoints)
 	}
-	if got := ts.ahead("b", 50, 0, 0, 2); got != 2*nearCapPoints {
+	if got := ts.ahead("b", 50, 0, 0, 0, 2); got != 2*nearCapPoints {
 		t.Fatalf("another account: ahead %v; want %v", got, 2*nearCapPoints)
 	}
 	// #6958: five turns out as the reading was told came back after it.
 	// Its 7.5 points are those five's before them, not ten's, and the
 	// five come back since are in no reading yet
-	ts.ahead("c", 60, 0, 0, 5)
-	if got := ts.ahead("c", 67.5, 10, 5, 0); got != 7.5 {
+	ts.ahead("c", 60, 0, 0, 0, 5)
+	if got := ts.ahead("c", 67.5, 10, 5, 0, 0); got != 7.5 {
 		t.Fatalf("ahead %v; want the 5 turns no reading has, at 1.5", got)
 	}
 	// yalifesign on X again: turns don't spend alike, and one is taken
 	// to spend the most one spent in the window
-	ts.ahead("c", 75, 10, 10, 0)   // those five, at 1.5
-	ts.ahead("c", 79, 11, 11, 0)   // one long turn: 4 points
-	ts.ahead("c", 79.5, 12, 12, 0) // a short one: half a point
+	ts.ahead("c", 75, 10, 10, 0, 0)   // those five, at 1.5
+	ts.ahead("c", 79, 11, 11, 0, 0)   // one long turn: 4 points
+	ts.ahead("c", 79.5, 12, 12, 0, 0) // a short one: half a point
 	if got := ts.own("c"); got != 4 {
 		t.Fatalf("own %v; want the long turn's 4", got)
 	}
-	if got := ts.ahead("c", 79.5, 12, 12, 2); got != 8 {
+	if got := ts.ahead("c", 79.5, 12, 12, 0, 2); got != 8 {
 		t.Fatalf("ahead %v; want 2 turns out at 4", got)
 	}
 	// renewed, the first turn in the new window counts alone
-	ts.ahead("c", 1, 12, 12, 0)
-	ts.ahead("c", 2, 13, 13, 0)
+	ts.ahead("c", 1, 12, 12, 0, 0)
+	ts.ahead("c", 2, 13, 13, 0, 0)
 	if got := ts.own("c"); got != 1 {
 		t.Fatalf("own %v; want the new window's 1", got)
 	}
 	// a reading taken again with five turns back moved 20 points, and
 	// another session planned on it before its readThrough: the rise
 	// waits for the five, not learned of none and lost
-	ts.ahead("d", 60, 0, 0, 5)
-	if got := ts.ahead("d", 80, 5, 0, 0); got != 5*nearCapPoints {
+	ts.ahead("d", 60, 0, 0, 0, 5)
+	if got := ts.ahead("d", 80, 5, 0, 0, 0); got != 5*nearCapPoints {
 		t.Fatalf("ahead %v; want the 5 turns at %v", got, nearCapPoints)
 	}
-	ts.ahead("d", 80, 5, 5, 0)
+	ts.ahead("d", 80, 5, 5, 5, 0)
 	if got := ts.own("d"); got != 4 {
 		t.Fatalf("own %v; want the five's 4 a turn", got)
 	}
-	// gakiclin1 on X: a point learned over one turn, then 29 turns read
-	// that left a usage told in whole points where it was. They spent
-	// under a point between them, and are in the reading: a point for
-	// them, not 29, and a turn's point for each one no reading has
-	ts.ahead("e", 40, 0, 0, 0)
-	ts.ahead("e", 41, 1, 1, 0)
+	// gakiclin1 on X: a point learned over one turn, then 29 turns a
+	// reading taken again has, that left a usage told in whole points where
+	// it was. They spent under a point between them, and are in the
+	// reading: a point for them, not 29, and a turn's point for each one no
+	// reading has
+	ts.ahead("e", 40, 0, 0, 0, 0)
+	ts.ahead("e", 41, 1, 1, 1, 0)
 	for n := 2; n <= 30; n++ {
-		ts.ahead("e", 41, n, n, 0)
+		ts.ahead("e", 41, n, n, n, 0)
 	}
-	if got := ts.ahead("e", 41, 30, 30, 0); got != 1 {
+	if got := ts.ahead("e", 41, 30, 30, 30, 0); got != 1 {
 		t.Fatalf("ahead %v; want the point 29 turns read at 41%% spent at most", got)
 	}
-	if got := ts.ahead("e", 41, 32, 30, 1); got != 4 {
+	if got := ts.ahead("e", 41, 32, 30, 30, 1); got != 4 {
 		t.Fatalf("ahead %v; want that point and 3 turns no reading has, at 1", got)
 	}
 }
@@ -297,6 +298,39 @@ func TestNearCapHeldByTurnsNotRead(t *testing.T) {
 		if i >= len(why) || !strings.Contains(why[i], want) {
 			t.Fatalf("reasons %q; want %q", why, want)
 		}
+	}
+}
+
+// #7877: what a turn spends learned at ten points, as a rise another
+// computer signed in to the account made was taken as one turn's, then
+// six turns came back that left the usage at 35%. Those a reading taken
+// again has spent under a point between them, as a usage is told in
+// whole points, and are a point ahead of it, not ten each: counted so,
+// they held the account at 35% of a 95% cap till its week renewed. Those
+// only a reply counted read stay at what a turn spends, as a reply that
+// said nothing of the usage brought no reading of them.
+func TestTurnSpendsAheadOfAnUnmovedReading(t *testing.T) {
+	var ts turnSpends
+	ts.ahead("a", 25, 0, 0, 0, 0)
+	ts.ahead("a", 35, 1, 1, 0, 0) // one turn read, ten points
+	if got := ts.own("a"); got != nearCapPoints {
+		t.Fatalf("own %v; want %v", got, nearCapPoints)
+	}
+	// six turns since, the first five counted read by the reply after each
+	if got := ts.ahead("a", 35, 7, 6, 0, 0); got != 6*maxTurnSpend {
+		t.Fatalf("ahead %v; want the six at %v, none of them read again", got, maxTurnSpend)
+	}
+	// read again with all six back, the usage still at 35
+	if got := ts.ahead("a", 35, 7, 7, 7, 0); got != 1 {
+		t.Fatalf("ahead %v; want a point for the six", got)
+	}
+	// two turns out and one come back since, which no reading has yet
+	if got := ts.ahead("a", 35, 8, 7, 7, 2); got != 3*maxTurnSpend+1 {
+		t.Fatalf("ahead %v; want three turns at %v and the six's point", got, maxTurnSpend)
+	}
+	// a reading that moved has every turn read
+	if got := ts.ahead("a", 36, 8, 8, 7, 0); got != 0 {
+		t.Fatalf("ahead %v; want nothing ahead of a reading that has every turn", got)
 	}
 }
 

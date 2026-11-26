@@ -116,7 +116,8 @@ func (s *Server) nearCapOf(c candidate, now time.Time) (used, ahead float64, nea
 	}
 	used, _ = al.For(c.model, now)
 	out, _, turns := s.lanes.out(c.who())
-	ahead = s.turnSpend.ahead(c.who(), used, turns, s.lanes.inReading(c.who()), out)
+	read, again := s.lanes.inReading(c.who())
+	ahead = s.turnSpend.ahead(c.who(), used, turns, read, again, out)
 	return used, ahead, al.NearCap(c.model, caps, nearCapPoints+ahead, now)
 }
 
@@ -191,18 +192,31 @@ const maxTurnSpend = 2 * nearCapPoints
 // together, out as the reading was told, were never ahead of it, and the
 // account went past its cap by a round of them (#6958).
 //
-// The turns a reading has that left it where it last moved to are in it,
-// and spent under a point between them, as a usage is told in whole
+// Of the turns come back since the usage last moved, those a reading
+// taken again has (again, lanes.readThrough) left it where it last moved
+// to and spent under a point between them, as a usage is told in whole
 // points: a point at most is ahead for them, not what a turn is taken to
 // spend for each. Counted each at that, the 29 turns read at 41% since one
 // took an account from 40% were 29 points ahead of it, and it was held at
-// 41% of its 70% cap (gakiclin1 on X).
-func (t *turnSpends) ahead(who string, used float64, turns, read, out int) float64 {
+// 41% of its 70% cap (gakiclin1 on X); six held one at 35% of a 95% cap
+// till its week renewed, nothing sent to it to move its reading (#7877).
+// Those only a reply counted read (lanes.began) stay at what a turn
+// spends: a reply that said nothing of the usage brought no reading of
+// them, and taken as a point between them they took an account from a
+// reading of 70% that never moved to the vendor's 100%, past a 95% cap
+// (TestNearCapSilentRepliesStayAhead). A Claude setup-token account's
+// usage can't be read again: its reading, taken again or not, is what its
+// last reply told as that turn began (claudeHeardStands), without that
+// turn, so near its cap it can go past the cap by what that one turn
+// spent. Held by it instead, it was held till its window renewed, as no
+// reply could tell its reading again.
+func (t *turnSpends) ahead(who string, used float64, turns, read, again, out int) float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.noteLocked(who, used, min(read, turns))
+	unmoved := max(min(again, s.read)-s.turns, 0)
 	g := s.guess()
-	return g*float64(out+max(turns-s.read, 0)) + min(g*float64(s.read-s.turns), 1)
+	return g*float64(out+max(turns-s.turns, 0)-unmoved) + min(g*float64(unmoved), 1)
 }
 
 // own is what one more turn on who is taken to spend, as learned (ahead

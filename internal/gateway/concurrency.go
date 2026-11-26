@@ -50,6 +50,11 @@ type lanes struct {
 	// the reading it brings has those turns and none come back since
 	// (cap_near.go, #6958)
 	read map[string]int
+	// again is how many turns had come back on each when its usage was
+	// last read again with none out (readThrough): a reading that has
+	// them, where a reply that said nothing of the usage brought none of
+	// the turns read counts (TestNearCapSilentRepliesStayAhead)
+	again map[string]int
 }
 
 // began notes that one of who's turns took its lane now.
@@ -70,15 +75,20 @@ func (l *lanes) readThrough(who string, n int) {
 	if l.read == nil {
 		l.read = map[string]int{}
 	}
+	if l.again == nil {
+		l.again = map[string]int{}
+	}
 	l.read[who] = max(l.read[who], n)
+	l.again[who] = max(l.again[who], n)
 }
 
 // inReading is how many of who's turns come back the reading last told
-// has at most: those come back as one of its turns last took its lane.
-func (l *lanes) inReading(who string) int {
+// has at most: those come back as one of its turns last took its lane;
+// and of them, those a reading taken again has (readThrough).
+func (l *lanes) inReading(who string) (read, again int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.read[who]
+	return l.read[who], l.again[who]
 }
 
 // plan counts a turn out on who before it takes its lane, and gives back
